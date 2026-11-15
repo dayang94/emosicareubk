@@ -1,5 +1,7 @@
 import {useEffect,useState,useCallback} from 'react'
 import {supabase,rpcRetry} from './supabase'
+import {parseCSV,muatTurunTemplat} from './csv'
+import {janaPDF,simpanExcel} from './laporan'
 import {PieChart,Pie,Cell,Tooltip,ResponsiveContainer,LineChart,Line,XAxis,YAxis,Legend} from 'recharts'
 
 const EMO=[['gembira','😄','GEMBIRA','#34d399'],['tenang','🙂','BAIK / TENANG','#60a5fa'],['biasa','😐','BIASA','#94a3b8'],
@@ -49,11 +51,11 @@ function CheckIn(){
     const{data,error,attempt}=await rpcRetry('submit_checkin',{p_student:sid,p_emotion:emo})
     const ok=data&&(data.success||(attempt>0&&data.message.startsWith('MURID SUDAH')))
     setMsg(error?'Ralat sambungan. Sila cuba lagi.':ok?'Terima kasih kerana berkongsi perasaan anda. Setiap emosi anda penting!':data.message)
-    setEmo('');setTimeout(()=>{setMsg('');setSid('');setBusy(false)},3500)}
+    if(!error)setEmo('');setTimeout(()=>{setMsg('');if(!error)setSid('');setBusy(false)},error?2500:3500)}
   if(msg)return <div className="priv"><h1>{msg}</h1></div>
   if(sid)return <div className="priv"><h1>HARI INI SAYA RASA...</h1><div className="emos" style={{width:'min(900px,100%)'}}>
     {EMO.map(([k,e,l])=><button key={k} className={'emo '+(emo===k?'sel':'')} onClick={()=>setEmo(k)}>{e}<small>{l}</small></button>)}</div>
-    <button className="pri" style={{fontSize:'1.2rem'}} disabled={!emo||busy} onClick={send}>HANTAR EMOSI SAYA</button></div>
+    <div className="row" style={{justifyContent:'center'}}><button style={{fontSize:'1.1rem'}} disabled={busy} onClick={()=>{setSid('');setEmo('')}}>‹ Kembali ke laman</button><button className="pri" style={{fontSize:'1.2rem'}} disabled={!emo||busy} onClick={send}>HANTAR EMOSI SAYA</button></div></div>
   return <div className="card"><h2>Semakan Emosi Harian</h2><p className="muted">Pilih kelas dan nama murid, kemudian beri ruang privasi kepada murid.</p>
     <div className="row"><select value={cls} onChange={e=>setCls(e.target.value)}><option value="">— Pilih kelas —</option>{classes.map(c=><option key={c.name}>{c.name}</option>)}</select>
     <select value={sid} onChange={e=>setSid(e.target.value)} disabled={!cls}><option value="">— Pilih murid —</option>{st.map(s=><option key={s.id} value={s.id}>{s.name}</option>)}</select></div></div>}
@@ -85,13 +87,24 @@ function Analysis({days=30}){
     <div className="card" style={{overflowX:'auto'}}><h3>Peta Haba Emosi (% mengikut kelas)</h3><table><thead><tr><th>Kelas</th>{EMO.map(e=><th key={e[0]}>{e[2]}</th>)}</tr></thead><tbody>
     {cls.map(c=><tr key={c}><td>{c}</td>{EMO.map(([k,,,col])=>{const v=pct(c,k);return <td key={k} style={{background:col+Math.min(255,Math.round(v*3.2)).toString(16).padStart(2,'0')}}>{v}%</td>})}</tr>)}</tbody></table></div></>}
 
+const ST=['Baharu','Perlu Kaunseling','Dalam Pemantauan','Tindakan Susulan','Selesai']
+const STC={'Baharu':'#60a5fa','Perlu Kaunseling':'#f87171','Dalam Pemantauan':'#facc15','Tindakan Susulan':'#fb923c','Selesai':'#34d399'}
 function Alerts(){
-  const[rows,setR]=useState([]);const load=()=>supabase.from('referral_alerts').select('*,students(name,class)').order('alert_date',{ascending:false}).limit(100).then(({data})=>setR(data||[]))
+  const[rows,setR]=useState([]);const[f,setF]=useState('Semua');const[err,setErr]=useState('')
+  const load=()=>supabase.from('referral_alerts').select('*,students(name,class)').order('alert_date',{ascending:false}).limit(200).then(({data})=>setR(data||[]))
   useEffect(()=>{load();const ch=supabase.channel('al').on('postgres_changes',{event:'INSERT',schema:'public',table:'referral_alerts'},load).subscribe();return()=>supabase.removeChannel(ch)},[])
-  const save=async(r,patch)=>{const{data:{user}}=await supabase.auth.getUser();await supabase.from('referral_alerts').update({...patch,handled_by:user.id,updated_at:new Date().toISOString()}).eq('id',r.id);load()}
+  const save=async(r,patch)=>{setErr('');const{data:{user}}=await supabase.auth.getUser()
+    const{error}=await supabase.from('referral_alerts').update({...patch,handled_by:user.id,updated_at:new Date().toISOString()}).eq('id',r.id)
+    if(error)setErr('Ralat menyimpan: '+error.message);load()}
+  const n=s=>rows.filter(r=>r.status===s).length
+  const shown=f==='Semua'?rows:rows.filter(r=>r.status===f)
   return <div className="card"><h2>Amaran Emosi &amp; Rujukan</h2><p className="muted">Petunjuk awal untuk perhatian dan bimbingan, bukan diagnosis kesihatan mental.</p>
-    {!rows.length&&<p className="muted">Tiada amaran.</p>}{rows.map(r=><div key={r.id} className="card" style={{marginBottom:10}}><b>{r.students?.name}</b> · {r.students?.class} · {r.alert_date} · 😢😢😢
-      <div className="row" style={{marginTop:8}}><select value={r.status} onChange={e=>save(r,{status:e.target.value})}>{['Baharu','Dalam Pemantauan','Tindakan Susulan','Selesai'].map(s=><option key={s}>{s}</option>)}</select>
+    {n('Perlu Kaunseling')>0&&<div className="card" style={{borderColor:STC['Perlu Kaunseling'],marginBottom:10}}>🚩 <b>{n('Perlu Kaunseling')}</b> murid ditandakan <b>Perlu Kaunseling</b>.</div>}
+    <div className="row" style={{marginBottom:12}}>{['Semua',...ST].map(s=><button key={s} className={f===s?'pri':''} onClick={()=>setF(s)}>{s} ({s==='Semua'?rows.length:n(s)})</button>)}</div>
+    {err&&<p style={{color:'#f87171'}}>{err}</p>}
+    {!shown.length&&<p className="muted">Tiada amaran.</p>}
+    {shown.map(r=><div key={r.id} className="card" style={{marginBottom:10,borderLeft:'5px solid '+STC[r.status]}}><b>{r.students?.name}</b> · {r.students?.class} · {r.alert_date} · 😢😢😢 <span style={{color:STC[r.status],fontWeight:600}}>{r.status}</span>
+      <div className="row" style={{marginTop:8}}><select value={r.status} onChange={e=>save(r,{status:e.target.value})}>{ST.map(s=><option key={s}>{s}</option>)}</select>
       <textarea style={{flex:1}} placeholder="Catatan tindakan GBK" defaultValue={r.action_notes||''} onBlur={e=>e.target.value!==(r.action_notes||'')&&save(r,{action_notes:e.target.value})}/></div></div>)}</div>}
 
 const PN={guru:'Guru',gbksktk:'Guru Bimbingan dan Kaunseling',admin:'Pentadbir'}
@@ -107,23 +120,63 @@ function Landing({go}){
     <h2 style={{textAlign:'center',margin:'8px 0 0'}}>Pilih Portal Anda</h2>
     <div className="grid">{P.map(([id,i,t,d])=><div className="card" key={id} style={{textAlign:'center'}}><div style={{fontSize:'2.4rem'}}>{i}</div><b>{t}</b><div className="muted" style={{margin:'6px 0 12px'}}>{d}</div><button className="pri" onClick={()=>go(id)}>Masuk</button></div>)}</div><Footer/></div>}
 
+function ImportCSV({classes,onDone}){
+  const[rows,setRows]=useState([]);const[file,setFile]=useState('');const[msg,setMsg]=useState('');const[errs,setErrs]=useState([]);const[busy,setBusy]=useState(false)
+  const names=new Set(classes.map(c=>c.name));const norm=s=>(s||'').replace(/\s+/g,' ').trim()
+  const valid=r=>r.name&&names.has(r.class);const ok=rows.filter(valid);const bad=rows.filter(r=>!valid(r))
+  const pick=async e=>{const f=e.target.files[0];e.target.value='';if(!f)return;setMsg('');setErrs([]);setRows([]);setFile(f.name)
+    if(f.size>2e6){setMsg('Fail terlalu besar (maksimum 2 MB).');return}
+    const raw=parseCSV(await f.text());if(!raw.length){setMsg('Fail kosong.');return}
+    const h=raw[0].map(x=>norm(x).toLowerCase());let ni=h.findIndex(x=>['nama','name','nama murid'].includes(x));let ki=h.findIndex(x=>['kelas','class'].includes(x))
+    const hasH=ni>=0&&ki>=0;if(!hasH){ni=0;ki=1}
+    const out=raw.slice(hasH?1:0).map((r,i)=>({line:i+(hasH?2:1),name:norm(r[ni]),class:norm(r[ki]).toUpperCase()}))
+    if(out.length>2000){setMsg('Maksimum 2000 baris setiap import. Pecahkan fail kepada beberapa bahagian.');return}
+    setRows(out)}
+  const hantar=async()=>{setBusy(true);setMsg('');const{data,error}=await supabase.rpc('import_students',{p_rows:ok});setBusy(false)
+    if(error){setMsg('Ralat: '+error.message);return}
+    setMsg(data.message);setErrs(data.errors||[]);if(data.success){setRows([]);setFile('');onDone()}}
+  return <div className="card"><h2>Muat Naik CSV Data Murid</h2>
+    <p className="muted">Fail CSV dengan 2 lajur: <b>nama</b> dan <b>kelas</b> (contoh: AHMAD BIN ALI, 1 GALAXY). Nama kelas mesti sama dengan senarai kelas sistem. Murid yang nama dan kelasnya sudah wujud akan dilangkau.</p>
+    <div className="row"><button onClick={muatTurunTemplat}>⬇ Muat turun templat</button><input type="file" accept=".csv,text/csv" onChange={pick}/></div>
+    {file&&rows.length>0&&<div style={{marginTop:10}}><p><b>{file}</b>: <span className="ok">{ok.length} baris sah</span>{bad.length>0&&<> · <span style={{color:'#f87171'}}>{bad.length} baris tidak sah</span></>}</p>
+      {bad.length>0&&<ul className="muted" style={{margin:'0 0 10px'}}>{bad.slice(0,10).map(r=><li key={r.line}>Baris {r.line}: "{r.name||'(nama kosong)'}" / "{r.class||'(kelas kosong)'}"</li>)}{bad.length>10&&<li>…dan {bad.length-10} lagi</li>}</ul>}
+      <button className="pri" disabled={busy||!ok.length} onClick={hantar}>{busy?'Mengimport…':'Import '+ok.length+' murid'}</button></div>}
+    {msg&&<p><b>{msg}</b></p>}{errs.length>0&&<ul className="muted">{errs.map((x,i)=><li key={i}>{x}</li>)}</ul>}</div>}
+
 function Murid(){
-  const classes=useClasses();const[cls,setCls]=useState('');const[q,setQ]=useState('');const[pg,setPg]=useState(0);const[rows,setR]=useState([]);const[ld,setLd]=useState(true)
-  const[nm,setNm]=useState('');const[nc,setNc]=useState('');const[msg,setMsg]=useState('');const[tick,setTick]=useState(0);const dq=useDeb(q);useEffect(()=>setPg(0),[cls,dq])
+  const classes=useClasses();const[cls,setCls]=useState('');const[q,setQ]=useState('');const[st,setSt]=useState('Semua');const[pg,setPg]=useState(0);const[rows,setR]=useState([]);const[ld,setLd]=useState(true)
+  const[nm,setNm]=useState('');const[nc,setNc]=useState('');const[msg,setMsg]=useState('');const[tick,setTick]=useState(0);const[sel,setSel]=useState([]);const dq=useDeb(q)
+  useEffect(()=>{setPg(0)},[cls,dq,st]);useEffect(()=>{setSel([])},[cls,dq,st,pg,tick])
   useEffect(()=>{setLd(true);let r=supabase.from('students').select('id,name,class,is_active').order('class').order('name').range(pg*50,pg*50+49)
-    if(cls)r=r.eq('class',cls);if(dq)r=r.ilike('name','%'+dq+'%');r.then(({data})=>{setR(data||[]);setLd(false)})},[cls,dq,pg,tick])
+    if(cls)r=r.eq('class',cls);if(dq)r=r.ilike('name','%'+dq+'%');if(st==='Aktif')r=r.eq('is_active',true);if(st==='Tidak aktif')r=r.eq('is_active',false)
+    r.then(({data})=>{setR(data||[]);setLd(false)})},[cls,dq,st,pg,tick])
   const run=async(fn,args)=>{const{data,error}=await supabase.rpc(fn,args);setMsg(error?'Ralat: '+error.message:data.message);if(!error&&data.success){setTick(t=>t+1);return true}}
   const tambah=async e=>{e.preventDefault();if(await run('add_student',{p_name:nm,p_class:nc}))setNm('')}
   const padam=r=>window.confirm(`PADAM KEKAL "${r.name}" (${r.class})?\n\nSemua rekod emosi dan amaran murid ini turut dipadam dan TIDAK boleh dipulihkan.\nGunakan "Nyahaktif" jika sejarah emosi perlu dikekalkan.`)&&run('delete_student',{p_id:r.id})
+  const padamBanyak=()=>{if(window.prompt(`PADAM KEKAL ${sel.length} murid yang dipilih beserta SEMUA rekod emosi dan amaran mereka.\nTindakan ini TIDAK boleh dipulihkan.\n\nTaip PADAM untuk sahkan:`)==='PADAM')run('delete_students',{p_ids:sel})}
+  const toggle=id=>setSel(s=>s.includes(id)?s.filter(x=>x!==id):[...s,id])
   return <><form className="card" onSubmit={tambah}><h2>Tambah Murid</h2><div className="row"><input style={{flex:1}} placeholder="Nama murid" value={nm} onChange={e=>setNm(e.target.value)} required/>
     <select value={nc} onChange={e=>setNc(e.target.value)} required><option value="">— Pilih kelas —</option>{classes.map(c=><option key={c.name}>{c.name}</option>)}</select><button className="pri">+ Tambah</button></div>
     {msg&&<p className="muted">{msg}</p>}</form>
+    <ImportCSV classes={classes} onDone={()=>setTick(t=>t+1)}/>
     <div className="card"><h2>Senarai Murid</h2><div className="row"><select value={cls} onChange={e=>setCls(e.target.value)}><option value="">Semua kelas</option>{classes.map(c=><option key={c.name}>{c.name}</option>)}</select>
-    <input placeholder="Cari nama…" value={q} onChange={e=>setQ(e.target.value)}/></div>
-    {ld?<p>Memuatkan…</p>:!rows.length?<p className="muted">Tiada murid.</p>:<div style={{overflowX:'auto'}}><table><thead><tr><th>Nama</th><th>Kelas</th><th>Status</th><th>Tindakan</th></tr></thead><tbody>
-    {rows.map(r=><tr key={r.id}><td>{r.name}</td><td>{r.class}</td><td className={r.is_active?'ok':'no'}>{r.is_active?'Aktif':'Tidak aktif'}</td>
-    <td className="row"><button onClick={()=>run('set_student_active',{p_id:r.id,p_active:!r.is_active})}>{r.is_active?'Nyahaktif':'Aktifkan'}</button><button style={{color:'#f87171'}} onClick={()=>padam(r)}>🗑 Padam</button></td></tr>)}</tbody></table></div>}
+    <select value={st} onChange={e=>setSt(e.target.value)}>{['Semua','Aktif','Tidak aktif'].map(s=><option key={s}>{s}</option>)}</select>
+    <input placeholder="Cari nama…" value={q} onChange={e=>setQ(e.target.value)}/>
+    {sel.length>0&&<button style={{color:'#f87171'}} onClick={padamBanyak}>🗑 Padam {sel.length} dipilih</button>}</div>
+    {ld?<p>Memuatkan…</p>:!rows.length?<p className="muted">Tiada murid.</p>:<div style={{overflowX:'auto'}}><table><thead><tr><th><input type="checkbox" style={{width:'auto'}} title="Pilih semua di halaman ini" checked={rows.length>0&&sel.length===rows.length} onChange={e=>setSel(e.target.checked?rows.map(r=>r.id):[])}/></th><th>Nama</th><th>Kelas</th><th>Status</th><th>Tindakan</th></tr></thead><tbody>
+    {rows.map(r=><tr key={r.id}><td><input type="checkbox" style={{width:'auto'}} checked={sel.includes(r.id)} onChange={()=>toggle(r.id)}/></td><td>{r.name}</td><td>{r.class}</td><td className={r.is_active?'ok':'no'}>{r.is_active?'Aktif':'Tidak aktif'}</td>
+    <td><div className="row"><button onClick={()=>run('set_student_active',{p_id:r.id,p_active:!r.is_active})}>{r.is_active?'Nyahaktif':'Aktifkan'}</button><button style={{color:'#f87171'}} onClick={()=>padam(r)}>🗑 Padam</button></div></td></tr>)}</tbody></table></div>}
     <div className="row" style={{marginTop:10}}><button disabled={!pg} onClick={()=>setPg(pg-1)}>‹</button><span>Halaman {pg+1}</span><button disabled={rows.length<50} onClick={()=>setPg(pg+1)}>›</button></div></div></>}
+
+function Laporan(){
+  const[f,setF]=useState(ago(30));const[t,setT]=useState(today());const[busy,setBusy]=useState('');const[msg,setMsg]=useState('')
+  const buat=async j=>{setBusy(j);setMsg('');try{await(j==='pdf'?janaPDF:simpanExcel)(f,t);setMsg('Laporan berjaya dijana. Semak folder muat turun anda.')}catch(e){setMsg('Ralat: '+(e.message||e))}setBusy('')}
+  return <div className="card"><h2>Laporan</h2><p className="muted">Mengandungi statistik emosi agregat, ringkasan mengikut kelas dan senarai murid dalam amaran / perlu kaunseling. Dokumen ini SULIT, kongsi kepada pihak berkenaan sahaja.</p>
+    <div className="row">{[7,30,90,180,365].map(x=><button key={x} onClick={()=>{setF(ago(x));setT(today())}}>{x} hari</button>)}</div>
+    <div className="row" style={{margin:'12px 0'}}><label className="muted">Dari<br/><input type="date" value={f} onChange={e=>setF(e.target.value)}/></label><label className="muted">Hingga<br/><input type="date" value={t} onChange={e=>setT(e.target.value)}/></label></div>
+    {f>t&&<p style={{color:'#f87171'}}>Tarikh mula mesti sebelum tarikh akhir.</p>}
+    <div className="row"><button className="pri" disabled={!!busy||f>t} onClick={()=>buat('pdf')}>{busy==='pdf'?'Menjana…':'📄 Jana Laporan PDF'}</button><button className="pri" disabled={!!busy||f>t} onClick={()=>buat('xlsx')}>{busy==='xlsx'?'Menjana…':'📊 Simpan Laporan Excel'}</button></div>
+    {msg&&<p><b>{msg}</b></p>}</div>}
 
 const NEXT=n=>{const[y,...r]=n.split(' ');return (+y+1)+' '+r.join(' ')}
 function NaikKelas(){
@@ -149,9 +202,30 @@ function NaikKelas(){
     {last&&<div className="card"><b>Naik kelas terakhir:</b> {new Date(last.performed_at).toLocaleString('ms-MY')} · {last.moved} naik, {last.graduated} tamat {last.undone?'(dibatalkan)':''}
     {!last.undone&&<div style={{marginTop:8}}><button disabled={busy} onClick={()=>window.confirm('Batalkan naik kelas terakhir dan kembalikan murid ke kelas asal?')&&run('undo_last_promotion')}>↩ Batal Naik Kelas Terakhir</button></div>}</div>}</>}
 
+function Kalendar(){
+  const t0=new Date();const[ym,setYm]=useState([t0.getFullYear(),t0.getMonth()]);const[data,setData]=useState({});const[sel,setSel]=useState(null);const[det,setDet]=useState(null);const[ld,setLd]=useState(true)
+  const[y,m]=ym;const first=new Date(y,m,1);const last=new Date(y,m+1,0);const td=today()
+  useEffect(()=>{setLd(true);supabase.rpc('daily_participation',{p_from:iso(first),p_to:iso(last)}).then(({data:d})=>{const o={};(d||[]).forEach(r=>{o[r.day]=r});setData(o);setLd(false)})},[y,m])
+  useEffect(()=>{setDet(null);if(sel)supabase.rpc('day_class_participation',{p_date:sel}).then(({data:d})=>setDet(d||[]))},[sel])
+  const go=n=>{const d=new Date(y,m+n,1);setYm([d.getFullYear(),d.getMonth()]);setSel(null)}
+  const cells=[...Array(first.getDay()).fill(null),...Array.from({length:last.getDate()},(_,i)=>i+1)]
+  const sum=k=>(det||[]).reduce((a,r)=>a+r[k],0)
+  return <><div className="card"><div className="row" style={{justifyContent:'space-between',alignItems:'center'}}><button onClick={()=>go(-1)}>‹</button>
+    <h2 style={{margin:0}}>{first.toLocaleDateString('ms-MY',{month:'long',year:'numeric'})}</h2><button onClick={()=>go(1)}>›</button></div>
+    <p className="muted">✓ sudah menjawab · ✗ belum menjawab. Warna hijau lebih pekat bermakna penyertaan lebih tinggi. Hari bukan persekolahan dipudarkan. Klik satu hari untuk lihat mengikut kelas.</p>
+    <div className="calgrid">{['Ahd','Isn','Sel','Rab','Kha','Jum','Sab'].map(x=><div key={x} className="muted" style={{textAlign:'center'}}>{x}</div>)}
+    {cells.map((d,i)=>{if(!d)return <div key={'e'+i}/>;const k=iso(new Date(y,m,d));const r=data[k];const fut=k>td;const sch=!!r?.school_day;const pc=r&&r.total?r.done/r.total:0
+      return <button key={k} className="cal" onClick={()=>setSel(k)} style={{background:sch&&!fut?`rgba(52,211,153,${(.08+pc*.45).toFixed(2)})`:'rgba(255,255,255,.04)',opacity:sch?1:.5,outline:k===sel?'2px solid #fff':k===td?'2px solid #6d5dfc':'none'}}>
+        <b>{d}</b>{sch&&!fut&&r&&<><span className="ok">✓ {r.done}</span><span>✗ {Math.max(0,r.total-r.done)}</span></>}</button>})}</div>{ld&&<p className="muted">Memuatkan…</p>}</div>
+    {sel&&<div className="card"><h3>{new Date(sel+'T00:00:00').toLocaleDateString('ms-MY',{weekday:'long',day:'numeric',month:'long',year:'numeric'})}</h3>
+      {data[sel]&&!data[sel].school_day&&<p className="muted">Bukan hari persekolahan.</p>}
+      {!det?<p className="muted">Memuatkan…</p>:<div style={{overflowX:'auto'}}><table><thead><tr><th>Kelas</th><th>Jumlah murid</th><th>Sudah menjawab</th><th>Belum menjawab</th></tr></thead><tbody>
+      {det.map(r=><tr key={r.class}><td>{r.class}</td><td>{r.total}</td><td className="ok">{r.done}</td><td>{r.total-r.done}</td></tr>)}
+      <tr><td><b>Jumlah</b></td><td><b>{sum('total')}</b></td><td className="ok"><b>{sum('done')}</b></td><td><b>{sum('total')-sum('done')}</b></td></tr></tbody></table></div>}</div>}</>}
+
 const PORTAL={teacher:{tabs:['Papan Pemuka','Semakan Emosi Harian','Status Penyertaan'],view:{'Papan Pemuka':<Summary/>,'Semakan Emosi Harian':<CheckIn/>,'Status Penyertaan':<Status/>}},
- gbk:{tabs:['Papan Pemuka','Peta Haba & Trend Emosi','Amaran Emosi','Pengurusan Murid','Naik Kelas'],view:{'Papan Pemuka':<><Summary/><Analysis days={7}/></>,'Peta Haba & Trend Emosi':<Analysis/>,'Amaran Emosi':<Alerts/>,'Pengurusan Murid':<Murid/>,'Naik Kelas':<NaikKelas/>}},
- admin:{tabs:['Papan Pemuka','Analisis Data'],view:{'Papan Pemuka':<><Summary/><Analysis days={7}/></>,'Analisis Data':<Analysis/>}}}
+ gbk:{tabs:['Papan Pemuka','Kalendar','Peta Haba & Trend Emosi','Amaran Emosi','Pengurusan Murid','Laporan','Naik Kelas'],view:{'Papan Pemuka':<><Summary/><Analysis days={7}/></>,'Kalendar':<Kalendar/>,'Peta Haba & Trend Emosi':<Analysis/>,'Amaran Emosi':<Alerts/>,'Pengurusan Murid':<Murid/>,'Laporan':<Laporan/>,'Naik Kelas':<NaikKelas/>}},
+ admin:{tabs:['Papan Pemuka','Analisis Data','Status Murid'],view:{'Papan Pemuka':<><Summary/><Analysis days={7}/></>,'Analisis Data':<Analysis/>,'Status Murid':<Status/>}}}
 
 export default function App(){
   const[role,setRole]=useState();const[portal,setPortal]=useState(null);const[ready,setReady]=useState(false);const[tab,setTab]=useState('Papan Pemuka')
