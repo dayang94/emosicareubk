@@ -2,6 +2,7 @@ import {useEffect,useState,useCallback} from 'react'
 import {supabase,rpcRetry} from './supabase'
 import {parseCSV,muatTurunTemplat} from './csv'
 import {janaPDF,simpanExcel} from './laporan'
+import {KPM_2027,KELANTAN_2027} from './kpm2027'
 import {PieChart,Pie,Cell,Tooltip,ResponsiveContainer,LineChart,Line,XAxis,YAxis,Legend} from 'recharts'
 
 const EMO=[['gembira','😄','GEMBIRA','#34d399'],['tenang','🙂','BAIK / TENANG','#60a5fa'],['biasa','😐','BIASA','#94a3b8'],
@@ -223,8 +224,53 @@ function Kalendar(){
       {det.map(r=><tr key={r.class}><td>{r.class}</td><td>{r.total}</td><td className="ok">{r.done}</td><td>{r.total-r.done}</td></tr>)}
       <tr><td><b>Jumlah</b></td><td><b>{sum('total')}</b></td><td className="ok"><b>{sum('done')}</b></td><td><b>{sum('total')-sum('done')}</b></td></tr></tbody></table></div>}</div>}</>}
 
+const fmtD=d=>d.slice(8)+'/'+d.slice(5,7)
+function KalendarSekolah(){
+  const t0=new Date();const[ym,setYm]=useState([t0.getFullYear(),t0.getMonth()]);const[map,setMap]=useState({});const[sel,setSel]=useState(null)
+  const[jenis,setJenis]=useState('cuti');const[ket,setKet]=useState('');const[hingga,setHingga]=useState('');const[busy,setBusy]=useState(false);const[msg,setMsg]=useState('');const[tick,setTick]=useState(0)
+  const[y,m]=ym;const first=new Date(y,m,1);const last=new Date(y,m+1,0);const td=today()
+  useEffect(()=>{supabase.from('school_calendar').select('calendar_date,is_school_day,description').gte('calendar_date',iso(first)).lte('calendar_date',iso(last))
+    .then(({data})=>{const o={};(data||[]).forEach(r=>{o[r.calendar_date]=r});setMap(o)})},[y,m,tick])
+  const info=k=>{const r=map[k];const def=new Date(k+'T00:00:00').getDay()<=4
+    return r?{school:r.is_school_day,desc:r.description||'',set:true,def}:{school:def,desc:def?'':'Hujung minggu',set:false,def}}
+  const go=n=>{const d=new Date(y,m+n,1);setYm([d.getFullYear(),d.getMonth()]);setSel(null);setMsg('')}
+  const pick=k=>{const i=info(k);setSel(k);setHingga(k);setJenis(i.school?'cuti':'sekolah');setKet(map[k]?.description||'');setMsg('')}
+  const run=async(fn,args)=>{setBusy(true);setMsg('');const{data,error}=await supabase.rpc(fn,args);setBusy(false)
+    if(error){setMsg('Ralat: '+error.message);return}setMsg(data.message);if(data.success)setTick(t=>t+1)}
+  const simpan=()=>run('set_school_ranges',{p_items:[{from:sel,to:hingga||sel,school:jenis==='sekolah',desc:ket}]})
+  const padam=()=>run('clear_school_days',{p_from:sel,p_to:hingga||sel})
+  const muat=(items,nama)=>{if(window.confirm('Muatkan '+nama+'?\n\nTarikh yang sama akan ditimpa dengan data ini.'))run('set_school_ranges',{p_items:items})}
+  const cells=[...Array(first.getDay()).fill(null),...Array.from({length:last.getDate()},(_,i)=>i+1)]
+  const list=Object.values(map).sort((a,b)=>a.calendar_date<b.calendar_date?-1:1).reduce((a,r)=>{const p=a[a.length-1]
+    const nx=p&&iso(new Date(new Date(p.to+'T00:00:00').getTime()+864e5))
+    if(p&&nx===r.calendar_date&&p.school===r.is_school_day&&p.desc===(r.description||''))p.to=r.calendar_date
+    else a.push({from:r.calendar_date,to:r.calendar_date,school:r.is_school_day,desc:r.description||''});return a},[])
+  const si=sel?info(sel):null
+  return <><div className="card"><div className="row" style={{justifyContent:'space-between',alignItems:'center'}}><button onClick={()=>go(-1)}>‹</button>
+    <h2 style={{margin:0}}>Kalendar Sekolah · {first.toLocaleDateString('ms-MY',{month:'long',year:'numeric'})}</h2><button onClick={()=>go(1)}>›</button></div>
+    <p className="muted">Lalai: Ahad hingga Khamis ialah hari persekolahan; Jumaat dan Sabtu ialah hujung minggu. Klik satu tarikh untuk tandakan cuti atau hari persekolahan ganti. Cuti yang ditanda akan dikecualikan daripada kiraan "belum menjawab" dan pengesanan sedih 3 hari berturut-turut.</p>
+    <div className="row muted" style={{marginBottom:8}}><span>🟥 Cuti</span><span>🟩 Hari sekolah ganti</span><span>⬜ Hari sekolah biasa</span><span>▫ Hujung minggu</span></div>
+    <div className="calgrid">{['Ahd','Isn','Sel','Rab','Kha','Jum','Sab'].map(x=><div key={x} className="muted" style={{textAlign:'center'}}>{x}</div>)}
+    {cells.map((d,i)=>{if(!d)return <div key={'e'+i}/>;const k=iso(new Date(y,m,d));const f=info(k)
+      const bg=f.set&&!f.school?'rgba(248,113,113,.28)':!f.school?'rgba(255,255,255,.04)':f.set?'rgba(52,211,153,.22)':'rgba(255,255,255,.08)'
+      return <button key={k} className="cal" onClick={()=>pick(k)} style={{background:bg,opacity:(!f.school&&!f.set)?0.5:1,outline:k===sel?'2px solid #fff':k===td?'2px solid #6d5dfc':'none'}}>
+        <b>{d}</b>{f.desc&&<span className="muted" style={{fontSize:'.62rem',lineHeight:1.15,overflow:'hidden',display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical'}}>{f.desc}</span>}</button>})}</div></div>
+    {sel&&<div className="card"><h3>{new Date(sel+'T00:00:00').toLocaleDateString('ms-MY',{weekday:'long',day:'numeric',month:'long',year:'numeric'})}</h3>
+      <p className="muted">Status semasa: {si.school?(si.set?'Hari persekolahan (ditetapkan)':'Hari persekolahan (lalai)'):(si.set?'Cuti: '+(si.desc||'tanpa keterangan'):'Hujung minggu (lalai)')}</p>
+      <div className="row"><select value={jenis} onChange={e=>setJenis(e.target.value)}><option value="cuti">Tandakan sebagai Cuti</option><option value="sekolah">Tandakan sebagai Hari persekolahan</option></select>
+      <input style={{flex:1}} placeholder="Keterangan (cth. Cuti peristiwa)" maxLength={120} value={ket} onChange={e=>setKet(e.target.value)}/></div>
+      <div className="row" style={{margin:'10px 0'}}><label className="muted">Hingga tarikh (untuk julat, boleh dibiar sama)<br/><input type="date" min={sel} value={hingga} onChange={e=>setHingga(e.target.value)}/></label></div>
+      <div className="row"><button className="pri" disabled={busy||!hingga||hingga<sel} onClick={simpan}>{busy?'Menyimpan…':'Simpan'}</button>
+      <button disabled={busy||!hingga||hingga<sel} onClick={padam}>Padam penetapan (kembali ke lalai)</button></div></div>}
+    <div className="card"><h3>Penetapan bulan ini</h3>{!list.length?<p className="muted">Tiada penetapan. Semua hari mengikut lalai Ahad hingga Khamis.</p>:
+      <table><tbody>{list.map(r=><tr key={r.from}><td style={{whiteSpace:'nowrap'}}>{r.from===r.to?fmtD(r.from):fmtD(r.from)+' - '+fmtD(r.to)}</td><td className={r.school?'ok':''}>{r.school?'Hari sekolah ganti':'Cuti'}</td><td>{r.desc}</td></tr>)}</tbody></table>}</div>
+    <div className="card"><h3>Muat kalendar rasmi KPM</h3><p className="muted">Menetapkan semua tarikh cuti penggal, cuti tambahan KPM dan cuti am 2027 bagi Kumpulan A (Kedah, Kelantan, Terengganu) mengikut Surat Siaran KPM Bil. 1 Tahun 2026. Tarikh yang sama akan ditimpa. Anda masih boleh mengubah mana-mana hari selepas itu.</p>
+      <div className="row"><button className="pri" disabled={busy} onClick={()=>muat(KPM_2027,'Kalendar KPM 2027 (Kumpulan A)')}>📅 Muat Kalendar KPM 2027</button>
+      <button disabled={busy} onClick={()=>muat(KELANTAN_2027,'cuti negeri Kelantan 2027 (Keputeraan Sultan 29-30 Sep)')}>Tambah cuti negeri Kelantan 2027</button></div></div>
+    {msg&&<div className="card"><b>{msg}</b></div>}</>}
+
 const PORTAL={teacher:{tabs:['Papan Pemuka','Semakan Emosi Harian','Status Penyertaan'],view:{'Papan Pemuka':<Summary/>,'Semakan Emosi Harian':<CheckIn/>,'Status Penyertaan':<Status/>}},
- gbk:{tabs:['Papan Pemuka','Kalendar','Peta Haba & Trend Emosi','Amaran Emosi','Pengurusan Murid','Laporan','Naik Kelas'],view:{'Papan Pemuka':<><Summary/><Analysis days={7}/></>,'Kalendar':<Kalendar/>,'Peta Haba & Trend Emosi':<Analysis/>,'Amaran Emosi':<Alerts/>,'Pengurusan Murid':<Murid/>,'Laporan':<Laporan/>,'Naik Kelas':<NaikKelas/>}},
+ gbk:{tabs:['Papan Pemuka','Kalendar Penyertaan','Kalendar Sekolah','Peta Haba & Trend Emosi','Amaran Emosi','Pengurusan Murid','Laporan','Naik Kelas'],view:{'Papan Pemuka':<><Summary/><Analysis days={7}/></>,'Kalendar Penyertaan':<Kalendar/>,'Kalendar Sekolah':<KalendarSekolah/>,'Peta Haba & Trend Emosi':<Analysis/>,'Amaran Emosi':<Alerts/>,'Pengurusan Murid':<Murid/>,'Laporan':<Laporan/>,'Naik Kelas':<NaikKelas/>}},
  admin:{tabs:['Papan Pemuka','Analisis Data','Status Murid'],view:{'Papan Pemuka':<><Summary/><Analysis days={7}/></>,'Analisis Data':<Analysis/>,'Status Murid':<Status/>}}}
 
 export default function App(){
