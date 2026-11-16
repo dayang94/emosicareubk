@@ -5,7 +5,11 @@ body:before,body:after{content:"";position:fixed;border-radius:50%;filter:blur(7
 body:before{width:340px;height:340px;background:#6d5dfc55;top:8%;left:6%}body:after{width:300px;height:300px;background:#3aa0ff44;bottom:8%;right:8%;animation-delay:-4s}
 .wrap{display:flex;min-height:100vh}.side{width:230px;padding:20px;display:flex;flex-direction:column;gap:8px}
 .card{background:rgba(255,255,255,.07);backdrop-filter:blur(16px);border:1px solid rgba(255,255,255,.14);border-radius:18px;padding:20px;
-box-shadow:0 14px 40px rgba(0,0,0,.35);animation:fl 7s ease-in-out infinite}.card:nth-child(2n){animation-delay:-2s}.card:nth-child(3n){animation-delay:-4s}
+box-shadow:0 14px 40px rgba(0,0,0,.35);position:relative;transition:transform .3s ease,box-shadow .3s ease}
+/* Kad hanya terangkat apabila kursor di atasnya. ::after melebarkan kawasan hover supaya kad tidak berkelip di tepi. */
+.card::after{content:"";position:absolute;inset:-6px 0;z-index:-1}
+@media(hover:hover){.card:hover{transform:translateY(-4px);box-shadow:0 22px 50px rgba(0,0,0,.45)}}
+@media(prefers-reduced-motion:reduce){.card{transition:none}.card:hover{transform:none}}
 .main{flex:1;padding:24px;display:flex;flex-direction:column;gap:18px}.grid{display:grid;gap:16px;grid-template-columns:repeat(auto-fit,minmax(190px,1fr))}
 .big{font-size:2rem;font-weight:700}.muted{opacity:.7;font-size:.85rem}
 button,select,input,textarea{font:inherit;color:inherit;background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.2);border-radius:12px;padding:10px 14px}
