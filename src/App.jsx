@@ -2,7 +2,7 @@ import {useEffect,useState,useCallback} from 'react'
 import {supabase,rpcRetry} from './supabase'
 import {parseCSV,muatTurunTemplat} from './csv'
 import {janaPDF,simpanExcel} from './laporan'
-import {KPM_2027,KELANTAN_2027} from './kpm2027'
+import {KPM_2027,TERENGGANU_2027} from './kpm2027'
 import {PieChart,Pie,Cell,Tooltip,ResponsiveContainer,LineChart,Line,XAxis,YAxis,Legend} from 'recharts'
 
 const EMO=[['gembira','😄','GEMBIRA','#34d399'],['tenang','🙂','BAIK / TENANG','#60a5fa'],['biasa','😐','BIASA','#94a3b8'],
@@ -266,7 +266,7 @@ function KalendarSekolah(){
       <table><tbody>{list.map(r=><tr key={r.from}><td style={{whiteSpace:'nowrap'}}>{r.from===r.to?fmtD(r.from):fmtD(r.from)+' - '+fmtD(r.to)}</td><td className={r.school?'ok':''}>{r.school?'Hari sekolah ganti':'Cuti'}</td><td>{r.desc}</td></tr>)}</tbody></table>}</div>
     <div className="card"><h3>Muat kalendar rasmi KPM</h3><p className="muted">Menetapkan semua tarikh cuti penggal, cuti tambahan KPM dan cuti am 2027 bagi Kumpulan A (Kedah, Kelantan, Terengganu) mengikut Surat Siaran KPM Bil. 1 Tahun 2026. Tarikh yang sama akan ditimpa. Anda masih boleh mengubah mana-mana hari selepas itu.</p>
       <div className="row"><button className="pri" disabled={busy} onClick={()=>muat(KPM_2027,'Kalendar KPM 2027 (Kumpulan A)')}>📅 Muat Kalendar KPM 2027</button>
-      <button disabled={busy} onClick={()=>muat(KELANTAN_2027,'cuti negeri Kelantan 2027 (Keputeraan Sultan 29-30 Sep)')}>Tambah cuti negeri Kelantan 2027</button></div></div>
+      <button disabled={busy} onClick={()=>muat(TERENGGANU_2027,'cuti negeri Terengganu 2027 (6 Jan, 4 Mac, 26 Apr)')}>Tambah cuti negeri Terengganu 2027</button></div></div>
     {msg&&<div className="card"><b>{msg}</b></div>}</>}
 
 const PORTAL={teacher:{tabs:['Papan Pemuka','Semakan Emosi Harian','Status Penyertaan'],view:{'Papan Pemuka':<Summary/>,'Semakan Emosi Harian':<CheckIn/>,'Status Penyertaan':<Status/>}},

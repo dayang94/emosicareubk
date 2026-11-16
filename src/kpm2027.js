@@ -1,4 +1,4 @@
-// Kalendar Akademik 2027 - Kumpulan A (Kedah, Kelantan, Terengganu); cuti tambahan khusus Kelantan.
+// Kalendar Akademik 2027 - Kumpulan A (Kedah, Kelantan, Terengganu); cuti tambahan KPM yang sama untuk Kelantan & Terengganu.
 // Sumber: Surat Siaran KPM Bil. 1 Tahun 2026 (Lampiran A & C). Hari persekolahan lalai: Ahad-Khamis.
 export const KPM_2027 = [
   { from: '2027-01-01', to: '2027-01-03', school: false, desc: 'Sesi persekolahan belum bermula' },
@@ -22,7 +22,9 @@ export const KPM_2027 = [
   { from: '2027-12-03', to: '2027-12-31', school: false, desc: 'Cuti Akhir Persekolahan' },
 ]
 
-// Cuti negeri Kelantan (tidak dikira dalam "jumlah hari" KPM). Sahkan dengan PPD/pihak sekolah sebelum guna.
-export const KELANTAN_2027 = [
-  { from: '2027-09-29', to: '2027-09-30', school: false, desc: 'Hari Keputeraan Sultan Kelantan' },
+// Cuti negeri Terengganu (tidak dikira dalam "jumlah hari" KPM). Sahkan dengan PPD/JPN Terengganu sebelum guna.
+export const TERENGGANU_2027 = [
+  { from: '2027-01-06', to: '2027-01-06', school: false, desc: 'Israk dan Mikraj (cuti negeri)' },
+  { from: '2027-03-04', to: '2027-03-04', school: false, desc: 'Ulang Tahun Pertabalan Sultan Terengganu' },
+  { from: '2027-04-26', to: '2027-04-26', school: false, desc: 'Hari Keputeraan Sultan Terengganu' },
 ]
