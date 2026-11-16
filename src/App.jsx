@@ -11,7 +11,7 @@ const iso=d=>d.toLocaleDateString('sv-SE'); const today=()=>iso(new Date())
 const ago=n=>{const d=new Date();d.setDate(d.getDate()-n);return iso(d)}
 const useDeb=(v,ms=400)=>{const[x,s]=useState(v);useEffect(()=>{const t=setTimeout(()=>s(v),ms);return()=>clearTimeout(t)},[v,ms]);return x}
 
-function Footer(){return <footer><img src="/logo-ubk.png" alt="UBK TesTKa" style={{height:56,marginBottom:6}}/><br/><b>EmosiCare</b> – Sistem Kesejahteraan Emosi Murid<br/>Unit Bimbingan dan Kaunseling, Sekolah Kebangsaan Telok Kalong · <b>TesTKa Leading The Future</b><br/>
+function Footer(){return <footer><img src="/logo-ubk.png" alt="UBK TesTKa" style={{height:72,marginBottom:6}}/><br/><b>EmosiCare</b> – Sistem Kesejahteraan Emosi Murid<br/>Unit Bimbingan dan Kaunseling, Sekolah Kebangsaan Telok Kalong · <b>TesTKa Leading The Future</b><br/>
 "Setiap emosi mempunyai cerita. Setiap murid berhak untuk didengari."<br/>Data adalah sulit dan untuk kegunaan sekolah sahaja.</footer>}
 
 function Login({pre,back}){
@@ -19,7 +19,7 @@ function Login({pre,back}){
   const go=async e=>{e.preventDefault();setBusy(true);setErr('')
     const{error}=await supabase.auth.signInWithPassword({email:`${u.trim().toLowerCase()}@emosicare.sk`,password:p})
     if(error)setErr('ID atau kata laluan tidak betul.');setBusy(false)}
-  return <div className="login"><div className="card" style={{textAlign:'center'}}><img className="logo" src="/logo-sekolah.png" alt="Logo SK Telok Kalong" style={{height:80}}/><h1 style={{margin:'6px 0 0'}}>EmosiCare</h1>
+  return <div className="login"><div className="card" style={{textAlign:'center'}}><img className="logo" src="/logo-ubk.png" alt="Logo UBK TesTKa" style={{height:120}}/><h1 style={{margin:'6px 0 0'}}>EmosiCare</h1>
     <div className="muted">Sistem Kesejahteraan Emosi Murid<br/>Unit Bimbingan dan Kaunseling · SK Telok Kalong</div><p><i>"Kenali Emosi, Hargai Diri."</i></p></div>
     <div className="row"><button onClick={back}>‹ Halaman Utama</button><span className="muted" style={{alignSelf:'center'}}>Portal: {PN[u]||'—'}</span></div>
     <form className="card" onSubmit={go} style={{display:'flex',flexDirection:'column',gap:10}}>
@@ -29,7 +29,7 @@ function Login({pre,back}){
       {err&&<div style={{color:'#f87171'}}>{err}</div>}<button className="pri" disabled={busy}>{busy?'Sila tunggu…':'Log Masuk'}</button></form><Footer/></div>}
 
 function Shell({tabs,tab,setTab,children}){
-  return <div className="wrap"><aside className="side card"><div style={{textAlign:'center'}}><img className="logo" src="/logo-sekolah.png" alt="Logo" style={{height:64}}/><h3 style={{margin:'4px 0 10px'}}>EmosiCare</h3></div>
+  return <div className="wrap"><aside className="side card"><div style={{textAlign:'center'}}><img className="logo" src="/logo-ubk.png" alt="Logo UBK TesTKa" style={{height:96}}/><h3 style={{margin:'4px 0 10px'}}>EmosiCare</h3></div>
     {tabs.map(t=><button key={t} className={'nav '+(tab===t?'on':'')} onClick={()=>setTab(t)}>{t}</button>)}
     <button onClick={()=>supabase.auth.signOut()} style={{marginTop:'auto'}}>Log Keluar</button></aside>
     <div style={{flex:1,display:'flex',flexDirection:'column'}}><main className="main">{children}</main><Footer/></div></div>}
@@ -113,8 +113,8 @@ function Landing({go}){
   const F=[['😊','Semakan Emosi Harian','Murid memilih emoji perasaan dalam masa beberapa saat.'],['🔒','Privasi Terjamin','Guru hanya melihat status penyertaan, bukan emosi murid.'],
    ['🔔','Amaran Awal','Pengesanan murid sedih tiga hari persekolahan berturut-turut.'],['📊','Analisis & Laporan','Peta haba dan trend emosi berdasarkan rekod sebenar.']]
   const P=[['guru','👩‍🏫','Portal Guru','Semakan emosi dan status penyertaan murid.'],['gbksktk','💜','Portal GBK','Pemantauan emosi, amaran dan pengurusan murid.'],['admin','🏫','Portal Pentadbir','Pemantauan statistik agregat (baca sahaja).']]
-  return <div className="hero"><section className="card hero-card"><img className="logo" src="/logo-ubk.png" alt="Logo UBK TesTKa" style={{width:'min(300px,70%)'}}/>
-    <div><img src="/logo-sekolah.png" alt="Logo SK Telok Kalong" style={{height:46,verticalAlign:'middle',marginRight:10}}/><h1 style={{fontSize:'2.6rem',margin:'6px 0',display:'inline-block',verticalAlign:'middle'}}>EmosiCare</h1>
+  return <div className="hero"><section className="card hero-card"><img className="logo" src="/logo-ubk.png" alt="Logo UBK TesTKa" style={{width:'min(280px,70%)'}}/>
+    <div><h1 style={{fontSize:'2.6rem',margin:'6px 0',display:'inline-block',verticalAlign:'middle'}}>EmosiCare</h1>
     <div className="muted">Sistem Kesejahteraan Emosi Murid<br/>Unit Bimbingan dan Kaunseling · Sekolah Kebangsaan Telok Kalong</div>
     <h3><i>"Kenali Emosi, Hargai Diri."</i></h3><b>TesTKa Leading The Future</b></div></section>
     <div className="grid">{F.map(([i,t,d])=><div className="card" key={t}><div style={{fontSize:'2rem'}}>{i}</div><b>{t}</b><div className="muted">{d}</div></div>)}</div>
