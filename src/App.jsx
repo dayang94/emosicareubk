@@ -4,6 +4,7 @@ import {parseCSV,muatTurunTemplat} from './csv'
 import {janaPDF,simpanExcel} from './laporan'
 import {KPM_2027,TERENGGANU_2027} from './kpm2027'
 import {KPM_2026} from './kpm2026'
+import {janaOPR,kecilkanGambar,tarikhMS} from './opr'
 import {PieChart,Pie,Cell,Tooltip,ResponsiveContainer,LineChart,Line,XAxis,YAxis,Legend} from 'recharts'
 
 const EMO=[['gembira','😄','GEMBIRA','#34d399'],['tenang','🙂','BAIK / TENANG','#60a5fa'],['biasa','😐','BIASA','#94a3b8'],
@@ -271,9 +272,67 @@ function KalendarSekolah(){
       <button disabled={busy} onClick={()=>muat(TERENGGANU_2027,'cuti negeri Terengganu 2027 (6 Jan, 4 Mac, 26 Apr)')}>Tambah cuti negeri Terengganu 2027</button></div></div>
     {msg&&<div className="card"><b>{msg}</b></div>}</>}
 
+const OPR_KOSONG={id:null,category:'Umum',program_name:'',organizer:'Unit Bimbingan dan Kaunseling',objective:'',summary:'',event_date:'',event_date_end:'',event_time:'',venue:'',attendance:'',
+  strengths:'',weaknesses:'',improvements:'',prepared_by:'DYG NURUL SYIFA BINTI ABG NAZARUDDIN (KB; PA)',prepared_role:'GURU BIMBINGAN DAN KAUNSELING',approved_by:'ROSMAWATI BINTI HUSSIN',approved_role:'GURU BESAR',photos:[]}
+function OPR({admin=false}){
+  const[rows,setRows]=useState([]);const[ld,setLd]=useState(true);const[f,setF]=useState(null);const[busy,setBusy]=useState('');const[msg,setMsg]=useState('')
+  const load=()=>{setLd(true);supabase.rpc('opr_list').then(({data,error})=>{if(error)setMsg('Ralat: '+error.message);setRows(data||[]);setLd(false)})}
+  useEffect(()=>{load()},[])
+  const ambil=async id=>{const{data,error}=await supabase.rpc('opr_get',{p_id:id});if(error||!data)throw error||new Error('OPR tidak dijumpai');return data}
+  const jana=async id=>{setBusy(id);setMsg('');try{await janaOPR(await ambil(id));setMsg('OPR berjaya dijana. Semak folder muat turun anda.')}catch(e){setMsg('Ralat: '+(e.message||e))}setBusy('')}
+  const edit=async id=>{setBusy(id);setMsg('');try{const d=await ambil(id);const o={...OPR_KOSONG};Object.keys(o).forEach(k=>{if(k!=='photos')o[k]=d[k]??''});o.id=d.id;o.photos=d.photos||[];setF(o)}catch(e){setMsg('Ralat: '+(e.message||e))}setBusy('')}
+  const padam=async r=>{if(!window.confirm(`Padam OPR "${r.program_name}"?\n\nTindakan ini tidak boleh dipulihkan.`))return;setBusy(r.id);const{data,error}=await supabase.rpc('opr_delete',{p_id:r.id});setBusy('');setMsg(error?'Ralat: '+error.message:data.message);if(!error)load()}
+  const simpan=async()=>{if(!f.program_name.trim()){setMsg('Nama program wajib diisi.');return}setBusy('simpan');setMsg('')
+    const{data,error}=await supabase.rpc('opr_save',{p:f});setBusy('');if(error){setMsg('Ralat: '+error.message);return}
+    setMsg(data.message);if(data.success){setF(null);load()}}
+  const tambahFoto=async e=>{const fs=[...e.target.files];e.target.value='';if(!fs.length)return;const ruang=6-f.photos.length
+    setMsg(fs.length>ruang?`Maksimum 6 gambar. ${fs.length-ruang} gambar tidak dimasukkan.`:'')
+    try{const baru=await Promise.all(fs.slice(0,ruang).map(x=>kecilkanGambar(x)));setF(o=>({...o,photos:[...o.photos,...baru]}))}catch(err){setMsg('Ralat: '+err.message)}}
+  const set=(k,v)=>setF(o=>({...o,[k]:v}))
+  const T=(k,l,ph)=><label className="muted" style={{display:'block'}}>{l}<textarea rows={3} maxLength={2000} placeholder={ph} value={f[k]} onChange={e=>set(k,e.target.value)} style={{width:'100%',marginTop:4}}/></label>
+  const I=(k,l,ph,type='text')=><label className="muted" style={{display:'block',flex:1,minWidth:200}}>{l}<input type={type} maxLength={200} placeholder={ph} value={f[k]} onChange={e=>set(k,e.target.value)} style={{width:'100%',marginTop:4}}/></label>
+  if(f)return <div className="card" style={{display:'flex',flexDirection:'column',gap:12}}><h2 style={{margin:0}}>{f.id?'Edit OPR':'OPR Baharu'}</h2>
+    <p className="muted" style={{margin:0}}>Isi ruangan seperti dalam templat One Page Report. Teks yang panjang dikecilkan automatik supaya muat pada satu halaman, jadi ringkaskan (sekitar 300 aksara setiap ruangan) untuk tulisan yang jelas.</p>
+    <div className="row">{I('program_name','Nama Program *','cth. Sesi Kaunseling Intervensi Murid')}
+      <label className="muted" style={{display:'block',minWidth:200}}>Kategori<select value={f.category} onChange={e=>set('category',e.target.value)} style={{width:'100%',marginTop:4}}><option>Umum</option><option>Intervensi Kaunseling</option></select></label></div>
+    {f.category==='Intervensi Kaunseling'&&<p className="muted" style={{margin:0}}>Kategori ini boleh dilihat dan dijana sebagai PDF oleh Pentadbir. Jangan letak nama murid dalam OPR.</p>}
+    <div className="row">{I('event_date','Tarikh Pelaksanaan *','', 'date')}{I('event_date_end','Hingga (jika lebih sehari)','','date')}{I('event_time','Masa','cth. 8.00 pagi - 10.00 pagi')}</div>
+    <div className="row">{I('venue','Tempat','cth. Bilik Kaunseling')}{I('attendance','Kehadiran','cth. 12 orang murid')}</div>
+    {I('organizer','Anjuran','cth. Unit Bimbingan dan Kaunseling')}
+    {T('objective','Objektif Program')}{T('summary','Rumusan Program')}{T('strengths','Kekuatan Program')}{T('weaknesses','Kelemahan Program')}{T('improvements','Penambahbaikan')}
+    <div><div className="muted">Gambar program (maksimum 6, JPG atau PNG). Gambar dipotong bulat dalam OPR.</div>
+      <div className="row" style={{margin:'8px 0'}}>{f.photos.map((u,i)=><div key={i} style={{position:'relative'}}><img src={u} alt={'Gambar '+(i+1)} style={{width:84,height:84,objectFit:'cover',borderRadius:'50%',border:'3px solid #f0e41e'}}/>
+        <button type="button" title="Buang gambar" onClick={()=>setF(o=>({...o,photos:o.photos.filter((_,j)=>j!==i)}))} style={{position:'absolute',top:-6,right:-6,padding:'0 7px',borderRadius:'50%'}}>×</button></div>)}</div>
+      {f.photos.length<6&&<input type="file" accept="image/*" multiple onChange={tambahFoto}/>}</div>
+    <div className="row">{I('prepared_by','Disediakan oleh (nama)')}{I('prepared_role','Jawatan')}</div>
+    <div className="row">{I('approved_by','Disahkan oleh (nama)')}{I('approved_role','Jawatan')}</div>
+    <div className="row"><button className="pri" disabled={!!busy} onClick={simpan}>{busy==='simpan'?'Menyimpan…':'Simpan OPR'}</button><button disabled={!!busy} onClick={()=>{setF(null);setMsg('')}}>Batal</button></div>
+    {msg&&<p><b>{msg}</b></p>}</div>
+  return <div className="card"><div className="row" style={{justifyContent:'space-between',alignItems:'center'}}><h2 style={{margin:0}}>{admin?'OPR Intervensi Kaunseling':'One Page Report (OPR)'}</h2>
+    {!admin&&<button className="pri" onClick={()=>{setF({...OPR_KOSONG});setMsg('')}}>+ OPR Baharu</button>}</div>
+    <p className="muted">{admin?'Laporan OPR intervensi kaunseling yang disediakan oleh GBK. Anda boleh menjana PDF sahaja.':'Isi maklumat program, simpan, kemudian jana PDF mengikut templat sekolah. Pilih kategori Intervensi Kaunseling supaya Pentadbir dapat menjana PDF yang sama.'}</p>
+    {ld?<p>Memuatkan…</p>:!rows.length?<p className="muted">Tiada OPR.</p>:<div style={{overflowX:'auto'}}><table><thead><tr><th>Tarikh</th><th>Program</th>{!admin&&<th>Kategori</th>}<th>Gambar</th><th>Tindakan</th></tr></thead><tbody>
+    {rows.map(r=><tr key={r.id}><td style={{whiteSpace:'nowrap'}}>{tarikhMS(r.event_date,r.event_date_end)||'-'}</td><td>{r.program_name}</td>{!admin&&<td>{r.category}</td>}<td>{r.photo_count}</td>
+    <td><div className="row"><button className="pri" disabled={!!busy} onClick={()=>jana(r.id)}>{busy===r.id?'Menjana…':'📄 Jana PDF'}</button>
+      {!admin&&<><button disabled={!!busy} onClick={()=>edit(r.id)}>Edit</button><button disabled={!!busy} style={{color:'#f87171'}} onClick={()=>padam(r)}>Padam</button></>}</div></td></tr>)}</tbody></table></div>}
+    {msg&&<p><b>{msg}</b></p>}</div>}
+
+function Intervensi(){
+  const[rows,setR]=useState([]);const[f,setF]=useState('Belum selesai');const[ld,setLd]=useState(true)
+  const load=()=>{setLd(true);supabase.rpc('counseling_students').then(({data})=>{setR(data||[]);setLd(false)})}
+  useEffect(()=>{load()},[])
+  const n=s=>rows.filter(r=>r.status===s).length;const belum=rows.filter(r=>r.status!=='Selesai').length
+  const shown=f==='Semua'?rows:f==='Belum selesai'?rows.filter(r=>r.status!=='Selesai'):rows.filter(r=>r.status===f)
+  return <div className="card"><div className="row" style={{justifyContent:'space-between',alignItems:'center'}}><h2 style={{margin:0}}>Murid Perlu Intervensi Kaunseling</h2><button onClick={load}>Muat Semula</button></div>
+    <p className="muted">Murid yang dikesan memilih <b>Sedih</b> pada 3 hari persekolahan berturut-turut. Status dikemas kini oleh GBK dan disegerakkan dengan Portal GBK. Catatan GBK dan rekod emosi harian tidak dipaparkan di sini.</p>
+    {n('Perlu Kaunseling')>0&&<div className="card" style={{borderColor:STC['Perlu Kaunseling'],marginBottom:10}}>🚩 <b>{n('Perlu Kaunseling')}</b> murid ditandakan <b>Perlu Kaunseling</b>.</div>}
+    <div className="row" style={{marginBottom:12}}>{[['Belum selesai',belum],...ST.map(s=>[s,n(s)]),['Semua',rows.length]].map(([s,c])=><button key={s} className={f===s?'pri':''} onClick={()=>setF(s)}>{s} ({c})</button>)}</div>
+    {ld?<p>Memuatkan…</p>:!shown.length?<p className="muted">Tiada murid dalam senarai ini.</p>:<div style={{overflowX:'auto'}}><table><thead><tr><th>Bil.</th><th>Nama</th><th>Kelas</th><th>Tarikh amaran</th><th>Status</th></tr></thead><tbody>
+    {shown.map((r,i)=><tr key={r.alert_id}><td>{i+1}</td><td>{r.name}</td><td>{r.class}</td><td>{r.alert_date}</td><td style={{color:STC[r.status],fontWeight:600}}>{r.status}</td></tr>)}</tbody></table></div>}</div>}
+
 const PORTAL={teacher:{tabs:['Papan Pemuka','Semakan Emosi Harian','Status Penyertaan'],view:{'Papan Pemuka':<Summary/>,'Semakan Emosi Harian':<CheckIn/>,'Status Penyertaan':<Status/>}},
- gbk:{tabs:['Papan Pemuka','Kalendar Penyertaan','Kalendar Sekolah','Peta Haba & Trend Emosi','Amaran Emosi','Pengurusan Murid','Laporan','Naik Kelas'],view:{'Papan Pemuka':<><Summary/><Analysis days={7}/></>,'Kalendar Penyertaan':<Kalendar/>,'Kalendar Sekolah':<KalendarSekolah/>,'Peta Haba & Trend Emosi':<Analysis/>,'Amaran Emosi':<Alerts/>,'Pengurusan Murid':<Murid/>,'Laporan':<Laporan/>,'Naik Kelas':<NaikKelas/>}},
- admin:{tabs:['Papan Pemuka','Analisis Data','Status Murid'],view:{'Papan Pemuka':<><Summary/><Analysis days={7}/></>,'Analisis Data':<Analysis/>,'Status Murid':<Status/>}}}
+ gbk:{tabs:['Papan Pemuka','Kalendar Penyertaan','Kalendar Sekolah','Peta Haba & Trend Emosi','Amaran Emosi','Pengurusan Murid','Laporan','OPR','Naik Kelas'],view:{'Papan Pemuka':<><Summary/><Analysis days={7}/></>,'Kalendar Penyertaan':<Kalendar/>,'Kalendar Sekolah':<KalendarSekolah/>,'Peta Haba & Trend Emosi':<Analysis/>,'Amaran Emosi':<Alerts/>,'Pengurusan Murid':<Murid/>,'Laporan':<Laporan/>,'OPR':<OPR/>,'Naik Kelas':<NaikKelas/>}},
+ admin:{tabs:['Papan Pemuka','Analisis Data','Status Murid','Intervensi Kaunseling'],view:{'Papan Pemuka':<><Summary/><Analysis days={7}/></>,'Analisis Data':<Analysis/>,'Status Murid':<Status/>,'Intervensi Kaunseling':<><Intervensi/><OPR admin/></>}}}
 
 export default function App(){
   const[role,setRole]=useState();const[portal,setPortal]=useState(null);const[ready,setReady]=useState(false);const[tab,setTab]=useState('Papan Pemuka')
